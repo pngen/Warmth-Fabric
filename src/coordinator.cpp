@@ -159,31 +159,39 @@ void Coordinator::handle_frame(std::shared_ptr<ConnState> cs, const proto::Frame
                 send_frame(cs->conn, cs->send_mutex, proto::MessageType::HELLO_ACK, w.done());
                 return;
             }
+            HelloAck ack;
             {
                 std::lock_guard<std::mutex> g(mutex_);
-                auto it = last_boot_.find(h.worker);
-                if (it != last_boot_.end() && it->second != h.boot)
-                    invalidate_worker_objects_locked(h.worker);
-                last_boot_[h.worker] = h.boot;
-                cs->id = h.worker; cs->boot = h.boot; cs->node = h.node;
-                cs->backend = h.backend; cs->registered = true;
-                workers_[h.worker] = cs;
-                std::fprintf(stderr, "worker %s registered (boot %s)\n", h.worker.to_string().c_str(), h.boot.to_string().c_str());
-                for (const auto& o : h.observed) {
-                    auto oit = objects_.find(o.id());
-                    if (oit == objects_.end()) {
-                        WarmthObject copy = o;
-                        if (is_execution_ready(copy.state())) copy.transition(WarmthState::DISCOVERED, "observed-not-live");
-                        copy.set_provenance(Provenance::REPORTED);
-                        objects_[copy.id()] = std::move(copy);
+                auto wit = workers_.find(h.worker);
+                if (wit != workers_.end() && wit->second->boot != h.boot) {
+                    // Stale/obsolete boot: the worker id is already live with a different
+                    // boot. Reject rather than silently re-registering stale authority.
+                    ack.accepted = false;
+                    ack.reason = "stale boot (worker already registered)";
+                } else {
+                    auto it = last_boot_.find(h.worker);
+                    if (it != last_boot_.end() && it->second != h.boot)
+                        invalidate_worker_objects_locked(h.worker);
+                    last_boot_[h.worker] = h.boot;
+                    cs->id = h.worker; cs->boot = h.boot; cs->node = h.node;
+                    cs->backend = h.backend; cs->registered = true;
+                    workers_[h.worker] = cs;
+                    for (const auto& o : h.observed) {
+                        auto oit = objects_.find(o.id());
+                        if (oit == objects_.end()) {
+                            WarmthObject copy = o;
+                            if (is_execution_ready(copy.state())) copy.transition(WarmthState::DISCOVERED, "observed-not-live");
+                            copy.set_provenance(Provenance::REPORTED);
+                            objects_[copy.id()] = std::move(copy);
+                        }
+                        worker_objects_[h.worker].insert(o.id());
                     }
-                    worker_objects_[h.worker].insert(o.id());
+                    ack.accepted = true;
                 }
             }
-            HelloAck a; a.accepted = true;
-            a.epoch = epoch_.load().value(); a.warmth_gen = warmth_gen_value_.load();
-            a.dep_gen = dep_gen_value_.load(); a.policy_gen = policy_gen_.value();
-            proto::WireEncoder w; encode_hello_ack(w, a);
+            ack.epoch = epoch_.load().value(); ack.warmth_gen = warmth_gen_value_.load();
+            ack.dep_gen = dep_gen_value_.load(); ack.policy_gen = policy_gen_.value();
+            proto::WireEncoder w; encode_hello_ack(w, ack);
             send_frame(cs->conn, cs->send_mutex, proto::MessageType::HELLO_ACK, w.done());
             return;
         }

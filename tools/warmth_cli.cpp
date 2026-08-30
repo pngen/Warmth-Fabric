@@ -309,7 +309,6 @@ static void terminate_child(ChildProc& c) {
     if (c.pid) { char cmd[64]; std::snprintf(cmd, sizeof(cmd), "taskkill /F /PID %lu >nul 2>&1", c.pid); std::system(cmd); }
     c.h = nullptr; c.pid = 0;
 }
-static bool child_running(ChildProc& c) { if (!c.h) return false; return WaitForSingleObject(c.h, 0) == WAIT_TIMEOUT; }
 #endif
 
 static int run_worker_mode(const std::vector<std::string>& a) {
@@ -358,8 +357,6 @@ static int run_multiprocess() {
     const auto bootB = Id128::derive("boot-B");
     const auto bootA2 = Id128::derive("boot-A-2");
     ChildProc pa, pb;
-    std::printf("A=%s B=%s bA1=%s bB=%s\n", workerA.to_string().c_str(), workerB.to_string().c_str(), bootA1.to_string().c_str(), bootB.to_string().c_str());
-    std::fflush(stdout);
     const std::string sport = std::to_string(port);
     auto spawnW = [&](const Id128& wid, const Id128& boot, ChildProc& out) {
         return spawn_child(exe, {"--worker", "--coordinator-port", sport, "--worker-id", wid.to_string(), "--boot", boot.to_string(), "--node", "node-0", "--workload", "workload-0"}, out);
@@ -367,8 +364,6 @@ static int run_multiprocess() {
     if (!spawnW(workerA, bootA1, pa)) { std::fprintf(stderr, "spawn worker A failed\n"); return 1; }
     if (!spawnW(workerB, bootB, pb)) { std::fprintf(stderr, "spawn worker B failed\n"); return 1; }
     for (int i = 0; i < 400 && coord.registered_workers() < 2; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    std::printf("registered=%zu pa_running=%d pb_running=%d\n", coord.registered_workers(), child_running(pa)?1:0, child_running(pb)?1:0);
-    std::fflush(stdout);
     if (coord.registered_workers() < 2) { std::fprintf(stderr, "workers did not register\n"); terminate_child(pa); terminate_child(pb); return 1; }
     const WarmthObjectId obj = Id128::derive("object-X");
     if (!coord.issue_warm(obj, WarmthAction::LOAD_MODEL, &workerA)) { std::fprintf(stderr, "issue_warm A failed\n"); terminate_child(pa); terminate_child(pb); return 1; }
@@ -417,7 +412,9 @@ static int run_multiprocess() {
             proto::Frame f2; f2.type = proto::MessageType::REPORT; f2.payload = w2.done();
             fw2.write(f2);
             proto::Frame resp; (void)fr2.read(resp);
+            conn2.close();
         }
+        conn.close();
         auto ob = coord.find_object(obj);
         if (ob && ob->execution_ready()) stale_rejected = false;
         if (!stale_rejected) { std::fprintf(stderr, "stale authority not rejected\n"); terminate_child(pa); terminate_child(pb); return 1; }

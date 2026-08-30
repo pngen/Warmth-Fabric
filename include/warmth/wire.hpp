@@ -53,8 +53,11 @@ inline void encode_object(proto::WireEncoder& w, const WarmthObject& o) {
 // input (invalid enum, truncation, duplicate dependency kind, etc.).
 inline bool decode_object(proto::WireDecoder& r, WarmthObject& o) {
     Id128 id, workload, node;
-    if (!r.id(id) || !r.id(workload) || !r.id(node)) return false;
+    // NOTE: field order must exactly match encode_object:
+    //   id, category, workload, node, device, backend, owner, options, state, ...
+    if (!r.id(id)) return false;
     std::uint8_t cat = 0; if (!r.u8(cat)) return false;
+    if (!r.id(workload) || !r.id(node)) return false;
     auto valid_cat = [](std::uint8_t c) {
         switch (static_cast<WarmthCategory>(c)) {
             case WarmthCategory::MODEL_WEIGHTS: case WarmthCategory::ADAPTERS: case WarmthCategory::TOKENIZER_RUNTIME:
