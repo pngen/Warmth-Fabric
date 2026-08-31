@@ -138,11 +138,9 @@ See `docs/architecture.md`, `docs/examples.md`, and `docs/benchmarks.md`.
 `evict`, `explain`, `plan`, `budgets`, `snapshot`, `save`, `recover`, `synthetic`, `multiprocess`,
 `cuda`, `benchmark`, plus `--coordinator` and `--worker` modes, with `--json` output.
 
-## Testing, no timeouts
+## Testing
 
-The build is configured so **no test timeout mechanism exists anywhere**: no `timeoutMs`, no CTest
-`TIMEOUT`, no watchdog, no process time limits. Tests run to natural pass, fail, crash, or manual
-termination after a diagnosed genuine hang. The suite covers the full lifecycle, guarded
+The test suite runs each case to its own completion and covers the full lifecycle, guarded
 transitions, dimensions, decay, invalidation, dependency changes, plans, warming, budgets,
 fairness, priority, eviction/demotion, persistence, recovery, stale process-local state, stale
 CUDA readiness, worker restart, stale boot/epoch/generation, malformed protocol, corruption and
