@@ -151,4 +151,4 @@ coordinator/worker, and CUDA cold-warm-invalidate-rewarm.
 
 ## License
 
-Apache License 2.0. Copyright 2026 Summon Software Labs. See `LICENSE`.
+Apache License 2.0. Copyright 2026 Summon Software Labs. No telemetry transmission.
